@@ -1,7 +1,8 @@
-from Groq_API_key import GROQ_API_KEY
-
 import os
-os.environ["GROQ_API_KEY"] = GROQ_API_KEY
+from dotenv import load_dotenv
+load_dotenv()
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 from langchain_groq import ChatGroq
 from langchain.memory import ConversationBufferMemory
@@ -9,7 +10,6 @@ from langchain.chains import ConversationalRetrievalChain
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from langchain_community.document_loaders import CSVLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -18,7 +18,7 @@ from langchain_community.vectorstores import FAISS
 
 embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
-    model_kwargs={"device": "cuda"}
+    model_kwargs={"device": "cpu"}
 )
 
 
@@ -48,14 +48,28 @@ for path in file_paths:
     documents.extend(docs)
 
 
-vectorstore = FAISS.from_documents(documents,embeddings)
+FAISS_INDEX_PATH = "faiss_index"
 
-retriever = vectorstore.as_retriever(search_kwargs ={"k" : 3})
+if os.path.exists(FAISS_INDEX_PATH):
+    print("✅ Loading existing FAISS index...")
+    vectorstore = FAISS.load_local(
+        FAISS_INDEX_PATH,
+        embeddings,
+        allow_dangerous_deserialization=True  # required fix
+    )
+else:
+    print("⚡ Creating new FAISS index...")
+    vectorstore = FAISS.from_documents(documents, embeddings)
+    vectorstore.save_local(FAISS_INDEX_PATH)
+    
+    
+retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
 
 llm = ChatGroq(
     model = "llama-3.1-8b-instant",
-    temperature = 0.7
+    temperature = 0.7,
+    groq_api_key=GROQ_API_KEY
 )
 
 
